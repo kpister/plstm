@@ -21,6 +21,12 @@ except:
 text = in_file.read().split('\n')
 
 small = random.sample(text, quantity)
+#small2 = random.sample(text, quantity)
+
+#for i in range(quantity):
+    #if random.random() < 0.5:
+        #small[i] = f'{small[i]} {small2[i]}'
+    
 out_file.write('\n'.join(small))
 
 in_file.close()

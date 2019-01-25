@@ -1,7 +1,7 @@
 import sys
 
 # Convert large paragraphs into uni-bi-trigram values separated by newlines
-def generate(in_text):
+def gen_ngrams(in_text):
     words = in_text.split(' ')
     sequences = []
 
@@ -31,6 +31,6 @@ if __name__ == '__main__':
         print('Usage: python generator.py in_file out_file')
         sys.exit(1)
     
-    out_file.write('\n'.join(generate(in_file.read())))
+    out_file.write('\n'.join(gen_ngrams(in_file.read())))
     out_file.close()
     in_file.close()

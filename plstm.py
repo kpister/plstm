@@ -7,11 +7,12 @@ from numpy import array
 from keras.utils import to_categorical
 from keras.models import Sequential
 from keras.layers import Dropout, Dense, LSTM, Bidirectional, Embedding
+from keras.callbacks import EarlyStopping
 
 # following https://machinelearningmastery.com/develop-character-based-neural-language-model-keras/
 # and       https://github.com/enriqueav/lstm_lyrics/blob/master/classifier_train.py
 
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 SEQ_LENGTH = 30
 
 def load_doc(filename, valid_chars=None):
@@ -34,20 +35,21 @@ def load_doc(filename, valid_chars=None):
 
     return {'words': words, 'text': text}
 
-def shuffle_and_split_training_set(sentences_original, labels_original, percentage_test=10):
+def shuffle_and_split_training_set(sentences_original, labels_original, percentage_test=20):
     # shuffle at unison
     print('Shuffling sentences')
     tmp_sentences = []
-    tmp_next_char = []
+    tmp_labels = []
     for i in np.random.permutation(len(sentences_original)):
         tmp_sentences.append(sentences_original[i])
-        tmp_next_char.append(labels_original[i])
-    cut_index = int(len(sentences_original) * (1.-(percentage_test/100.)))
-    x_train, x_test = tmp_sentences[:cut_index], tmp_sentences[cut_index:]
-    y_train, y_test = tmp_next_char[:cut_index], tmp_next_char[cut_index:]
+        tmp_labels.append(labels_original[i])
+    val_cut_index = int(len(sentences_original) * (1.-(2*percentage_test/100.)))
+    test_cut_index = int(len(sentences_original) * (1.-(percentage_test/100.)))
+    x_train, x_val, x_test = tmp_sentences[:val_cut_index], tmp_sentences[val_cut_index:test_cut_index], tmp_sentences[test_cut_index:]
+    y_train, y_val, y_test = tmp_labels[:val_cut_index], tmp_labels[val_cut_index:test_cut_index], tmp_labels[test_cut_index:]
 
     print("Training set = %d\nTest set = %d" % (len(x_train), len(y_test)))
-    return array(x_train), array(y_train), array(x_test), array(y_test)
+    return array(x_train), array(y_train), array(x_val), array(y_val), array(x_test), array(y_test)
 
 def get_model(vocab_size):
     # define model
@@ -61,7 +63,6 @@ def get_model(vocab_size):
 
 
 # Load data
-
 proteins = load_doc('text/protein_names_200000n.txt')
 normal   = load_doc('text/trigram_wiki_200000n.txt', list(set(proteins['text'])))
 print('Files loaded')
@@ -71,12 +72,9 @@ chars = sorted(list(set(proteins['text'] + '!')))
 mapping = dict((c, i) for i, c in enumerate(chars))
 vocab_size = len(mapping)
 
-mapping_file = open('map.json', 'w')
-mapping_file.write(json.dumps(mapping))
-mapping_file.flush()
-mapping_file.close()
-print(f'Mapping created and saved. Vocab size: {vocab_size}')
-
+with open('map.json', 'w') as mapping_file:
+    mapping_file.write(json.dumps(mapping))
+    print(f'Mapping created and saved. Vocab size: {vocab_size}')
 
 # Generate Datasets
 
@@ -85,8 +83,7 @@ sequences = list()
 for line in (proteins['words'] + normal['words']):
     sequences.append(array([mapping[char] for char in line]))
 
-sequences = array(sequences)
-sequences = array([to_categorical(x, num_classes=vocab_size) for x in sequences]) 
+sequences = array([to_categorical(x, num_classes=vocab_size) for x in array(sequences)]) 
 X = np.empty([array(sequences).shape[0], sequences[0].shape[0], sequences[0].shape[1]])
 
 for i, seq in enumerate(sequences):
@@ -98,21 +95,17 @@ for i, seq in enumerate(sequences):
 # create datasets
 y = [1]*len(proteins['words']) + [0]*len(normal['words'])
 y = to_categorical(y, num_classes=2)
-x_train, y_train, x_test, y_test = shuffle_and_split_training_set(X, y)
-y_train = y_train
-y_test = y_test
+x_train, y_train, x_val, y_val, x_test, y_test = shuffle_and_split_training_set(X, y)
 print('Created dataset')
 
-
-# Create Model and fit
-
+# Create Model
 print('Generating model')
 model = get_model(vocab_size)
 
 # fit model
-model.fit(x_train, y_train, epochs=20, verbose=2, validation_data=(x_test, y_test))
+early_stopping = EarlyStopping(monitor='val_loss', patience=2)
+model.fit(x_train, y_train, epochs=20, verbose=2, callbacks=[early_stopping], validation_data=(x_val, y_val))
 
 # save the model to file and evaluate
 model.save('model.h5')
 model.evaluate(x_test, y_test, batch_size=BATCH_SIZE)
-

@@ -1,7 +1,17 @@
 import sys
 
-def length(in_text, max_length=-1, verbose=False):
-    lines = in_text.split('\n')
+def pad(lines, length):
+    sequences = []
+    for line in lines:
+        line = line.strip()
+        if '\n' in line:
+            continue
+        line_len = len(line)
+        if line_len > 0 and line_len <= length:
+            sequences.append(line + '~' * (length - line_len))
+    return sequences
+
+def length(lines, max_length=-1, verbose=False):
     sequences = []
     buckets = {} # histogram
     above = -1
@@ -44,7 +54,7 @@ if __name__ == '__main__':
         print('Usage: python length.py in_file [max_length] [out_file]')
         sys.exit(1)
 
-    sequences = length(in_file.read(), max_length, True)
+    sequences = length(in_file.read().split('\n'), max_length, True)
     if out_file:
         out_file.write('\n'.join(sequences))
         out_file.flush()

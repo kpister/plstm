@@ -1,12 +1,12 @@
 import sys
 import json
 import numpy as np
-from generator import generate
+from generator import gen_ngrams
 from length import length
 from keras.models import load_model
 from keras.utils import to_categorical
 
-def testWord(word, model, mapping):
+def predict_word(word, model, mapping):
     sequence = np.array([mapping.get(char, len(mapping)-1) for char in word])
     sequence = np.array([to_categorical(x, num_classes=len(mapping)) for x in sequence])
     s = np.empty([1, sequence.shape[0], sequence.shape[1]])
@@ -27,10 +27,14 @@ if __name__ == '__main__':
         print(e)
         sys.exit(1)
 
-    gen = generate(p.read())
-    seqs = length('\n'.join(gen).lower(), 30)
+    gen = gen_ngrams(p.read())
+    seqs = length([x.lower() for x in gen], 30)
 
+    preds = []
     for seq in seqs:
-        prediction = testWord(seq, model, mapping)
-        if prediction[0][1] > 0.5:
-            print(f'{seq}: {prediction}')
+        preds.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
+
+    preds.sort(key=lambda x:x['pred'][1])
+    for p in preds:
+        print(f"{p['seq']} {p['pred'][0]*100:2.1f}% {p['pred'][1]*100:2.1f}%")
+

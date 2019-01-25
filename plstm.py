@@ -79,22 +79,10 @@ with open('map.json', 'w') as mapping_file:
 # Generate Datasets
 
 # convert each character to an array of one hot encoded vectors
-sequences = list()
-for line in (proteins['words'] + normal['words']):
-    sequences.append(array([mapping[char] for char in line]))
+lines = proteins['words'] + normal['words']
+X = [to_categorical([mapping[c] for c in l], num_classes=vocab_size) for l in lines]
 
-sequences = array([to_categorical(x, num_classes=vocab_size) for x in array(sequences)]) 
-X = np.empty([array(sequences).shape[0], sequences[0].shape[0], sequences[0].shape[1]])
-
-for i, seq in enumerate(sequences):
-    try:
-        X[i] = seq
-    except:
-        pass     # where is this error coming from?
-
-# create datasets
-y = [1]*len(proteins['words']) + [0]*len(normal['words'])
-y = to_categorical(y, num_classes=2)
+y = to_categorical([1]*len(proteins['words']) + [0]*len(normal['words']), num_classes=2)
 x_train, y_train, x_val, y_val, x_test, y_test = shuffle_and_split_training_set(X, y)
 print('Created dataset')
 

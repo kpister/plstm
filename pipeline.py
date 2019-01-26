@@ -1,10 +1,16 @@
+"""Pipeline
+Usage:
+    pipeline.py <patent_file> [options]
+
+Options:
+    -h, --help              show this message and exit
+    -m, --model FILE   set model file [default: ./model.h5]
+    -d, --map FILE   set mapping file [default: ./map.json]
+"""
+
 import sys
-
-if len(sys.argv) != 4:
-    print('Usage: python pipeline.py patent_file.xml model_file.h5 mapping_file.json')
-    sys.exit(1)
-
 import json
+from docopt import docopt
 from keras.models import load_model
 
 # personal tooling
@@ -16,12 +22,12 @@ from generator import gen_ngrams
 from length import pad
 
 try:
-    patent_file = open(sys.argv[1])
-    model = load_model(sys.argv[2])
-    mapping = json.load(open(sys.argv[3]))
-except Exception as e:
-    print(e)
-    print('Usage: python pipeline.py patent_file.xml model_file.h5 mapping_file.json')
+    arguments = docopt(__doc__)
+    patent_file = open(arguments['<patent_file>'])
+    model = load_model(arguments['--model'])
+    mapping = json.load(open(arguments['--map']))
+except:
+    print(__doc__)
     sys.exit(1)
 
 ## Parse input xml file

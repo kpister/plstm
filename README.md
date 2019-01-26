@@ -19,7 +19,7 @@ In utils there are a collection of python files.
     * - [ ] Protein Name Prediction
         * - [ ] Investigate tensorflow estimators
         * - [ ] Variable length LSTM input
-        * - [ ] Finish pipeline
+        * - [x] Finish pipeline
         * - [ ] Clean XML parsing
         * - [ ] Graph false positives and false negatives
             * - [ ] investigate what causes them at each epoch

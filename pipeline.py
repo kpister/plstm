@@ -11,6 +11,7 @@ Options:
 import sys
 import json
 from docopt import docopt
+arguments = docopt(__doc__)
 from keras.models import load_model
 
 # personal tooling
@@ -22,7 +23,6 @@ from generator import gen_ngrams
 from length import pad
 
 try:
-    arguments = docopt(__doc__)
     patent_file = open(arguments['<patent_file>'])
     model = load_model(arguments['--model'])
     mapping = json.load(open(arguments['--map']))
@@ -78,10 +78,10 @@ for seq in ref_ngrams:
         predictions.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
         sequences.append(seq)
 
-for seq in intro_ngrams:
-    if seq not in sequences:
-        predictions.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
-        sequences.append(seq)
+#for seq in intro_ngrams:
+    #if seq not in sequences:
+        #predictions.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
+        #sequences.append(seq)
 
 # cross reference against intro
 

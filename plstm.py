@@ -107,8 +107,9 @@ if __name__=='__main__':
     model = get_model(vocab_size, arguments)
 
     # fit model
-    early_stopping = EarlyStopping(monitor='val_loss', patience=2)
-    model.fit(x_train, y_train, epochs=20, verbose=2, callbacks=[early_stopping], validation_data=(x_val, y_val))
+    checkpoint = ModelCheckpoint('weights.{epoch:02d}-{val_los:.2f}.hdf5')
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=2)
+    model.fit(x_train, y_train, epochs=20, verbose=2, callbacks=[checkpoint, early_stopping], validation_data=(x_val, y_val))
 
     # save the model to file and evaluate
     model.save('model.h5')

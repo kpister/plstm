@@ -15,20 +15,20 @@ In utils there are a collection of python files.
 
 ### Project Roadmap
 
-* - [ ] Project
-    * - [ ] Protein Name Prediction
+* - Project
+    * - Protein Name Prediction
         * - [ ] Investigate tensorflow estimators
         * - [ ] Variable length LSTM input
         * - [x] Finish pipeline
+        * - [ ] AUC Graphing
         * - [ ] Clean XML parsing
         * - [ ] Graph false positives and false negatives
             * - [ ] investigate what causes them at each epoch
-        * - [ ] 
-    * - [ ] Uniprot Query
+    * - Uniprot Query
         * - [ ] Investigate Siamese Netorks in [this paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/cikm2013_DSSM_fullversion.pdf)
 
 
-* - [ ] Thesis Paper
+* - Thesis Paper
     * - [ ] Collect references
     * - [ ] Start writing
 

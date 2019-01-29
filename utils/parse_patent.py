@@ -6,15 +6,15 @@ class XMLDoc:
     def __init__(self, filename, intro=False, tables=False, citations=False):
         self.intro = self.summary = ""
         self.tables = None
-        self.patcit_table = self.nplcit_table = []
+        self.nplcit_table = []
 
         self.tree = ET.parse(filename)
         self.root = self.tree.getroot()
         self.citations = self.root.find('us-bibliographic-data-grant').find('us-references-cited')
         self.data = self.root.find('description')
 
-        self.f = self.parse_section("field of invention")
-        self.f = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.f)
+        #self.f = self.parse_section("field of invention")
+        #self.f = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.f)
         if intro:
             self.intro = self.parse_section("background")
             self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
@@ -34,11 +34,15 @@ class XMLDoc:
         start = False #Search for 'p' section with introduction
         for elem in self.data:
 
-            if elem.text == None:
+            #If introduction already found, exit loop
+            if elem.tag == 'heading' and start:
+                break
+
+            elif elem.text == None:
                 continue
 
             #Start of introduction
-            if elem.tag == 'heading' and header in elem.text.lower():
+            elif elem.tag == 'heading' and header in elem.text.lower():
                 start = True
             
             #Body of introduction
@@ -54,10 +58,6 @@ class XMLDoc:
                     if child.tail != None and re.search('[a-zA-Z0-9]',child.tail):
                         section += child.tail
             
-            #If introduction already found, exit loop
-            elif elem.tag == 'heading' and start:
-                break
-
         return section 
 
     #Read XML file and organizes all citations into two table based on type

@@ -8,84 +8,104 @@ Options:
     -d, --map FILE   set mapping file [default: ./map.json]
 """
 
-import sys
 import json
 from docopt import docopt
-arguments = docopt(__doc__)
-from keras.models import load_model
 
 # personal tooling
+import sys
 sys.path.append('utils/')
 from validate import predict_word
 from parse_patent import XMLDoc
 from parse_tsv import PatentTSV
 from generator import gen_ngrams
 from length import pad
+from keras.models import load_model
 
-try:
-    patent_file = open(arguments['<patent_file>'])
-    model = load_model(arguments['--model'])
-    mapping = json.load(open(arguments['--map']))
-except:
-    print(__doc__)
-    sys.exit(1)
-
-## Parse input xml file
-# filename should be direct path from current location
-# set intro to true when searching cits and intro
-
-doc = XMLDoc(patent_file, intro=True, citations=True)
-
-## Parse related tsv file for true targets
-# tsv file should be correlated in name
-# and located in the same directory
-try:
-    tsvname = sys.argv[1].replace("US0", "US")
-    tsvname = tsvname[:tsvname.find("-")] + ".tsv"
-    true_targets = PatentTSV(tsvname).targets
-    print(f"True proteins (from tsv): {', '.join(true_targets)}")
-except:
-    print('Could not find .tsv file with targets.\n Continuing')
-
-## Generate refs
-# read from xml file
-# refs :: paragraph (lowercase)
-refs = '\n'.join(doc.nplcit_table).lower()
-intro = doc.intro.lower()
-
-## Convert to ngram token sequences
-# ref_ngrams :: [sequences]
-ref_ngrams = gen_ngrams(refs)
-intro_ngrams = gen_ngrams(intro)
-
-## Trim and Pad reference sequences to length
-# this won't be needed with variable length lstm
-# ref_ngrams :: [sequences | len(sequences) = 30]
-# the remaining space on smaller values will be padded
-ref_ngrams = pad(ref_ngrams, length=30)
-intro_ngrams = pad(intro_ngrams, length=30)
-
-## Validate the references and intro
-# ref_ngrams  :: list[sequences]
-# intro :: list[sequences]
-# model :: .h5 file
-# mapping :: .json file
-
-predictions = []
-sequences = []
-for seq in ref_ngrams:
-    if seq not in sequences:
-        predictions.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
-        sequences.append(seq)
-
-#for seq in intro_ngrams:
-    #if seq not in sequences:
-        #predictions.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
-        #sequences.append(seq)
 
 # cross reference against intro
+def printDict(name, dic, logger):
+    logger.info(f'Found {len(dic)} possible targets from {name}')
+    if len(dic) != 0:
+        logger.info('Printing top 10:')
+        for k,v in sorted(dic.items(), key=lambda kv:kv[1][0])[:10]:
+            logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}%")
 
-predictions.sort(key=lambda x:x['pred'][1])
-for p in predictions:
-    print(f"{p['seq']} {p['pred'][0]*100:2.1f}% {p['pred'][1]*100:2.1f}%")
+def pipeline(patent_file, model_file, mapping_file, logger, errlog): 
+    try:
+        model = load_model(model_file)
+        with open(mapping_file) as mf:
+            mapping = json.load(mf)
+    except: 
+        print('Input failure')
+        return
+ 
+    ## Parse input xml file
+    # filename should be direct path from current location
+    # set intro to true when searching cits and intro
 
+    doc = XMLDoc(patent_file, intro=True, citations=True)
+
+    ## Parse related tsv file for true targets
+    # tsv file should be correlated in name
+    # and located in the same directory
+    try:
+        tsvname = patent_file.replace("US0", "US")
+        tsvname = tsvname[:tsvname.find("-")] + ".tsv"
+        true_targets = '\n'.join(PatentTSV(tsvname).targets)
+
+        logger.info(f"True proteins (from tsv):\n{true_targets}")
+    except:
+        errlog.error('Could not find .tsv file with targets.\n Continuing')
+
+    ## Generate refs
+    # read from xml file
+    # refs :: paragraph (lowercase)
+    refs = '\n'.join(doc.nplcit_table).lower()
+    intro = doc.intro.lower()
+
+    ## Convert to ngram token sequences
+    # ref_ngrams :: [sequences]
+    ref_ngrams = gen_ngrams(refs)
+    intro_ngrams = gen_ngrams(intro)
+
+    ## Trim and Pad reference sequences to length
+    # this won't be needed with variable length lstm
+    # ref_ngrams :: [sequences | len(sequences) = 30]
+    # the remaining space on smaller values will be padded
+    ref_ngrams = pad(ref_ngrams, length=30)
+    intro_ngrams = pad(intro_ngrams, length=30)
+
+    ## Validate the references and intro
+    # ref_ngrams  :: list[sequences]
+    # intro :: list[sequences]
+    # model :: .h5 file
+    # mapping :: .json file
+
+    ref_preds = {}
+    intro_preds = {}
+    cross_preds = {}
+
+    logger.info(f'Parsing {len(ref_ngrams)} possible reference sequences...')
+    if len(ref_ngrams) == 0:
+        errlog.error(f'{patent_file}:references:found 0 sequences')
+    for seq in ref_ngrams:
+        if seq not in ref_preds:
+            pred = list(predict_word(seq, model, mapping)[0])
+            if pred[1] > 0.9:
+                ref_preds[seq] = pred
+    printDict('references', ref_preds, logger)
+
+    logger.info(f'Parsing {len(intro_ngrams)} possible background sequences...')
+    if len(intro_ngrams) == 0:
+        errlog.error(f'{patent_file}:background:found 0 sequences')
+    for seq in intro_ngrams:
+        if seq in ref_preds:
+            cross_preds[seq] = ref_preds[seq]
+            intro_preds[seq] = ref_preds[seq]
+        else:
+            pred = list(predict_word(seq, model, mapping)[0])
+            if pred[1] > 0.9:
+                intro_preds[seq] = pred
+
+    printDict('background', intro_preds, logger)
+    printDict('crossover', cross_preds, logger)

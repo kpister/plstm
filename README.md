@@ -17,15 +17,23 @@ In utils there are a collection of python files.
 
 * Project
     * Protein Name Prediction
+        * - [ ] Connect to GPU, train more
+        * - [ ] Train with concat(protein, normal) as negatives
+        * - [ ] Train on full patents
         * - [ ] Investigate tensorflow estimators
         * - [ ] Variable length LSTM input
         * - [x] Finish pipeline
         * - [ ] AUC Graphing
         * - [ ] Clean XML parsing
+            * - [ ] Compile problematic patents
         * - [ ] Graph false positives and false negatives
             * - [ ] investigate what causes them at each epoch
-    * Uniprot Query
+        * - [ ] Multithread
+            * - [ ] Figure out with multiple keras instances
+    * Uniprot Query (normalizing names)
         * - [ ] Investigate Siamese Netorks in [this paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/cikm2013_DSSM_fullversion.pdf)
+        * - [ ] Build RNN->MLP network to classify "sameness"
+        * - [ ] Investigate UNIPROT API
 
 
 * Thesis Paper

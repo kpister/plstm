@@ -81,6 +81,7 @@ if __name__ == '__main__':
         filename = sys.argv[1]
         doc = XMLDoc(filename, intro=True, citations=True)
         print(doc.intro)
+        print("\n".join(doc.nplcit_table))
     except:
         print('Usage: python parse_patent.py patent_file.xml')
 

@@ -20,6 +20,7 @@ class XMLDoc:
             self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
             self.summary = self.parse_section("summary")
             self.summary = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.summary)
+            self.intro += ' ' + self.summary
         if tables:
             self.tables = self.parse_all_tables()
         if citations and self.citations:

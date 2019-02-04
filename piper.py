@@ -8,6 +8,8 @@ Options:
     -p, --patents PATENT_DIR    directory with patents [default: ../patents/]
     -m, --model FILE            set model file [default: ./model.h5]
     -d, --map FILE              set mapping file [default: ./map.json]
+    -o, --output DIR            set output director [default: 'output/']
+    -e, --error FILE            set error log file [default: 'err.log']
 """
 
 
@@ -33,14 +35,22 @@ def genLogger(name, level):
     return logger
 
 arguments = docopt(__doc__)
-patents = glob(f"{arguments['--patents']}*.XML")
-errlog = genLogger('err.log', logging.ERROR)
+patents = sorted(glob(f"{arguments['--patents']}*.XML"))
+errlog = genLogger(arguments['--error'], logging.ERROR)
 
+logger = logging.getLogger('output')
+f_format = logging.Formatter('%(levelname)s:%(message)s')
 # Set up for multithreading
 for patent in patents:
     logging.info(f'Working on {patent}')
     patent_name = os.path.basename(patent)[:-4] + '.info'
-    logger = genLogger(f'output/{patent_name}', logging.INFO)
+
+    f_handler = logging.FileHandler(f"{arguments['--output']}{patent_name}")
+    f_handler.setLevel(logging.INFO)
+    f_handler.setFormatter(f_format)
+    logger.addHandler(f_handler)
 
     pipeline(patent, arguments['--model'], arguments['--map'], logger, errlog)
     logging.info(f'Finished working on {patent}')
+    logger.removeHandler(f_handler)
+    f_handler.close()

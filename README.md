@@ -34,6 +34,7 @@ In utils there are a collection of python files.
         * - [ ] Investigate Siamese Netorks in [this paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/cikm2013_DSSM_fullversion.pdf)
         * - [ ] Build RNN->MLP network to classify "sameness"
         * - [ ] Investigate UNIPROT API
+            https://www.ebi.ac.uk/proteins/api/doc/
 
 
 * Thesis Paper

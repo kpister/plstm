@@ -10,6 +10,7 @@ Options:
 
 import json
 from docopt import docopt
+import logging
 
 # personal tooling
 import sys
@@ -30,7 +31,7 @@ def printDict(name, dic, logger):
         for k,v in sorted(dic.items(), key=lambda kv:kv[1][0])[:10]:
             logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}%")
 
-def pipeline(patent_file, model_file, mapping_file, logger, errlog): 
+def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None): 
     try:
         model = load_model(model_file)
         with open(mapping_file) as mf:
@@ -53,9 +54,11 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
         tsvname = tsvname[:tsvname.find("-")] + ".tsv"
         true_targets = '\n'.join(PatentTSV(tsvname).targets)
 
-        logger.info(f"True proteins (from tsv):\n{true_targets}")
-    except:
-        errlog.error('Could not find .tsv file with targets.\n Continuing')
+        if logger:
+            logger.info(f"True proteins (from tsv):\n{true_targets}")
+    except Exception as e:
+        if errlog:
+            errlog.error(f'{patent_file}:{e}\nContinuing')
 
     ## Generate refs
     # read from xml file
@@ -85,18 +88,21 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     intro_preds = {}
     cross_preds = {}
 
-    logger.info(f'Parsing {len(ref_ngrams)} possible reference sequences...')
-    if len(ref_ngrams) == 0:
+    if logger:
+        logger.info(f'Parsing {len(ref_ngrams)} possible reference sequences...')
+    if errlog and len(ref_ngrams) == 0:
         errlog.error(f'{patent_file}:references:found 0 sequences')
     for seq in ref_ngrams:
         if seq not in ref_preds:
             pred = list(predict_word(seq, model, mapping)[0])
             if pred[1] > 0.9:
                 ref_preds[seq] = pred
-    printDict('references', ref_preds, logger)
+    if logger:
+        printDict('references', ref_preds, logger)
 
-    logger.info(f'Parsing {len(intro_ngrams)} possible background sequences...')
-    if len(intro_ngrams) == 0:
+    if logger:
+        logger.info(f'Parsing {len(intro_ngrams)} possible background sequences...')
+    if errlog and len(intro_ngrams) == 0:
         errlog.error(f'{patent_file}:background:found 0 sequences')
     for seq in intro_ngrams:
         if seq in ref_preds:
@@ -107,5 +113,17 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
             if pred[1] > 0.9:
                 intro_preds[seq] = pred
 
-    printDict('background', intro_preds, logger)
-    printDict('crossover', cross_preds, logger)
+    if logger:
+        printDict('background', intro_preds, logger)
+        printDict('crossover', cross_preds, logger)
+
+if __name__ == '__main__':
+    arguments = docopt(__doc__)
+    logger = logging.getLogger('root')
+    f_handler = logging.StreamHandler()
+    f_handler.setLevel(logging.INFO)
+    f_format = logging.Formatter('%(levelname)s:%(message)s')
+    f_handler.setFormatter(f_format)
+    logger.addHandler(f_handler)
+ 
+    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], logger)

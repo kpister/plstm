@@ -28,7 +28,8 @@ class PatentTSV:
 if __name__ == "__main__":
     try:
         name = sys.argv[1]
-        tsv = TSVFile(name)
+        tsv = PatentTSV(name)
         print(tsv.targets)
-    except:
+    except Exception as e:
+        print(e)
         print('Usage: python parse_tsv.py patent.tsv')

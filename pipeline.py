@@ -38,11 +38,9 @@ def printDict(name, dic, logger):
     logger.info(f'Found {len(dic)} possible targets from {name}')
     if len(dic) != 0:
         logger.info('Printing top 10:')
-        logger.info(f"{'~'*50} norm, prot, comp")
-        #for k,v in dic.items():
-            #logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
-        for k,v in sorted(dic.items(), key=lambda kv:kv[2])[:10]:
-            logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+        logger.info(f"{'~'*50} prot, comp, norm")
+        for k,v in sorted(dic.items(), key=lambda kv:kv[1][1], reverse=True)[:10]:
+            logger.info(f"{k} {v[1]*100:2.1f}% {v[2]*100:2.1f}% {v[0]*100:2.1f}%")
 
 def top10(text, title, model, mapping, logger, errlog):
     ## Convert to ngram token sequences
@@ -96,7 +94,7 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     try:
         tsvname = patent_file.replace("US0", "US")
         tsvname = tsvname[:tsvname.find("-")] + ".tsv"
-        true_targets = '\n'.join(PatentTSV(tsvname).targets)
+        true_targets = '\n#'.join(PatentTSV(tsvname).targets)
 
         logger.info(f"True proteins (from tsv):\n#{true_targets}")
     except Exception as e:

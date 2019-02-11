@@ -2,9 +2,10 @@
 Usage:
     pipeline.py <patent_file> [options]
 
-Options: -h, --help              show this message and exit 
-    -m, --model FILE   set model file [default: ./model.h5]
-    -d, --map FILE   set mapping file [default: ./map.json]
+Options: 
+    -h, --help          show this message and exit 
+    -m, --model FILE    set model file [default: ./model.h5]
+    -d, --map FILE      set mapping file [default: ./map.json]
 """
 
 import json
@@ -21,23 +22,27 @@ from generator import gen_ngrams
 from length import pad
 from keras.models import load_model
 
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 
 # cross reference against intro
-def printDict(name, dic, logger, key=1):
+def printDict(name, dic, logger):
     logger.info(f'Found {len(dic)} possible targets from {name}')
     if len(dic) != 0:
         logger.info('Printing top 10:')
-        for k,v in dic.items():
+        logger.info(f"{'~'*50} norm, prot, comp")
+        #for k,v in dic.items():
+            #logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+        for k,v in sorted(dic.items(), key=lambda kv:kv[2])[:10]:
             logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
-            """
-        for k,v in sorted(dic.items(), key=lambda kv:kv[1][2])[:10]:
-            if logger:
-                logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
-            else:
-                print(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
-                """
 
 def top10(text, title, model, mapping, logger, errlog):
     ## Convert to ngram token sequences
@@ -75,15 +80,15 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
         with open(mapping_file) as mf:
             mapping = json.load(mf)
     except: 
-        print('Input failure')
-        return
+        print(f'{bcolors.FAIL}Input failure{bcolors.ENDC}')
+        return 1
  
     ## Parse input xml file
     # filename should be direct path from current location
     # set intro to true when searching cits and intro
 
     doc = XMLDoc(patent_file, title=True, abstract=True, intro=True, citations=True)
-    print(f'loaded {patent_file}')
+    print(f'{bcolors.OKBLUE}Loaded {patent_file}{bcolors.ENDC}')
 
     ## Parse related tsv file for true targets
     # tsv file should be correlated in name
@@ -93,7 +98,7 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
         tsvname = tsvname[:tsvname.find("-")] + ".tsv"
         true_targets = '\n'.join(PatentTSV(tsvname).targets)
 
-        logger.info(f"True proteins (from tsv):\n{true_targets}")
+        logger.info(f"True proteins (from tsv):\n#{true_targets}")
     except Exception as e:
         errlog.error(f'{patent_file}:{e}\nContinuing')
 
@@ -112,6 +117,9 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     abstract = top10(abstract, 'abstract', model, mapping, logger, errlog)
     title = top10(title, 'title', model, mapping, logger, errlog)
 
+    return 0
+
 if __name__ == '__main__':
+    logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
     arguments = docopt(__doc__)
     pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], logger=logging, errlog=logging)

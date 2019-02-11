@@ -7,7 +7,7 @@ def pad(lines, length):
         if '\n' in line:
             continue
         line_len = len(line)
-        if line_len > 0 and line_len <= length:
+        if line_len > 1 and line_len <= length:
             sequences.append(line + '~' * (length - line_len))
     return sequences
 

@@ -10,6 +10,7 @@ Options:
     -d, --map FILE              set mapping file [default: ./map.json]
     -o, --output DIR            set output director [default: output/]
     -e, --error FILE            set error log file [default: err.log]
+    --ignore-errors             set ignore-errors flag [default: False]
 """
 
 
@@ -50,7 +51,10 @@ for patent in patents:
     f_handler.setFormatter(f_format)
     logger.addHandler(f_handler)
 
-    pipeline(patent, arguments['--model'], arguments['--map'], logger, errlog)
+    err = pipeline(patent, arguments['--model'], arguments['--map'], logger, errlog)
     logging.info(f'Finished working on {patent}')
     logger.removeHandler(f_handler)
     f_handler.close()
+
+    if err != 0 and not arguments['--ignore-errors']:
+        break

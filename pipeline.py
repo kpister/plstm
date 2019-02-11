@@ -24,12 +24,60 @@ from keras.models import load_model
 
 
 # cross reference against intro
-def printDict(name, dic, logger):
-    logger.info(f'Found {len(dic)} possible targets from {name}')
+def printDict(name, dic, logger, key=1):
+    if logger:
+        logger.info(f'Found {len(dic)} possible targets from {name}')
+    else:
+        print(f'Found {len(dic)} possible targets from {name}')
     if len(dic) != 0:
-        logger.info('Printing top 10:')
-        for k,v in sorted(dic.items(), key=lambda kv:kv[1][0])[:10]:
-            logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}%")
+        if logger:
+            logger.info('Printing top 10:')
+        else:
+            print('Printing top 10:')
+        for k,v in dic.items():
+            print(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+            """
+        for k,v in sorted(dic.items(), key=lambda kv:kv[1][2])[:10]:
+            if logger:
+                logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+            else:
+                print(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+                """
+
+def top10(text, title, model, mapping, key=1, logger=None, errlog=None):
+    ## Convert to ngram token sequences
+    # ngrams :: [sequences]
+    ngrams = gen_ngrams(text)
+
+    ## Trim and Pad reference sequences to length
+    # this won't be needed with variable length lstm
+    # ngrams :: [sequences | len(sequences) = 50]
+    # the remaining space on smaller values will be padded
+    ngrams = pad(ngrams, length=50)
+
+    ## Validate the references and intro
+    # ngrams  :: list[sequences]
+    # intro :: list[sequences]
+    # model :: .h5 file
+    # mapping :: .json file
+    preds = {}
+
+    if logger:
+        logger.info(f'Parsing {len(ngrams)} possible {title} sequences...')
+    else:
+        print(f'Parsing {len(ngrams)} possible {title} sequences...')
+    if errlog and len(ngrams) == 0:
+        errlog.error(f'{patent_file}:{title}:found 0 sequences')
+    elif len(ngrams) == 0:
+        print(f'{patent_file}:{title}:found 0 sequences')
+    for seq in ngrams:
+        if seq not in preds:
+            pred = list(predict_word(seq, model, mapping)[0])
+            preds[seq] = pred
+
+    printDict(title, preds, logger)
+
+    return preds
 
 def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None): 
     try:
@@ -44,7 +92,8 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
     # filename should be direct path from current location
     # set intro to true when searching cits and intro
 
-    doc = XMLDoc(patent_file, intro=True, citations=True)
+    doc = XMLDoc(patent_file, title=True, abstract=True, intro=True, citations=True)
+    print('loaded doc')
 
     ## Parse related tsv file for true targets
     # tsv file should be correlated in name
@@ -56,74 +105,30 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
 
         if logger:
             logger.info(f"True proteins (from tsv):\n{true_targets}")
+        else:
+            print(f"True proteins (from tsv):\n{true_targets}")
     except Exception as e:
+        print(e)
         if errlog:
             errlog.error(f'{patent_file}:{e}\nContinuing')
+        else:
+            print(f'{patent_file}:{e}\nContinuing')
 
     ## Generate refs
     # read from xml file
     # refs :: paragraph (lowercase)
     refs = '\n'.join(doc.nplcit_table).lower()
     intro = doc.intro.lower()
+    abstract = doc.abstract.lower()
+    title = doc.title.lower()
+    print(f'Abstract: {abstract}')
+    print(f'Title: {title}')
 
-    ## Convert to ngram token sequences
-    # ref_ngrams :: [sequences]
-    ref_ngrams = gen_ngrams(refs)
-    intro_ngrams = gen_ngrams(intro)
-
-    ## Trim and Pad reference sequences to length
-    # this won't be needed with variable length lstm
-    # ref_ngrams :: [sequences | len(sequences) = 30]
-    # the remaining space on smaller values will be padded
-    ref_ngrams = pad(ref_ngrams, length=30)
-    intro_ngrams = pad(intro_ngrams, length=30)
-
-    ## Validate the references and intro
-    # ref_ngrams  :: list[sequences]
-    # intro :: list[sequences]
-    # model :: .h5 file
-    # mapping :: .json file
-
-    ref_preds = {}
-    intro_preds = {}
-    cross_preds = {}
-
-    if logger:
-        logger.info(f'Parsing {len(ref_ngrams)} possible reference sequences...')
-    if errlog and len(ref_ngrams) == 0:
-        errlog.error(f'{patent_file}:references:found 0 sequences')
-    for seq in ref_ngrams:
-        if seq not in ref_preds:
-            pred = list(predict_word(seq, model, mapping)[0])
-            if pred[1] > 0.9:
-                ref_preds[seq] = pred
-    if logger:
-        printDict('references', ref_preds, logger)
-
-    if logger:
-        logger.info(f'Parsing {len(intro_ngrams)} possible background sequences...')
-    if errlog and len(intro_ngrams) == 0:
-        errlog.error(f'{patent_file}:background:found 0 sequences')
-    for seq in intro_ngrams:
-        if seq in ref_preds:
-            cross_preds[seq] = ref_preds[seq]
-            intro_preds[seq] = ref_preds[seq]
-        else:
-            pred = list(predict_word(seq, model, mapping)[0])
-            if pred[1] > 0.9:
-                intro_preds[seq] = pred
-
-    if logger:
-        printDict('background', intro_preds, logger)
-        printDict('crossover', cross_preds, logger)
+    refs = top10(refs, 'references', model, mapping, logger, errlog)
+    #intro = top10(intro, 'introduction', model, mapping, logger, errlog)
+    abstract = top10(abstract, 'abstract', model, mapping, logger, errlog)
+    title = top10(title, 'title', model, mapping, logger, errlog)
 
 if __name__ == '__main__':
     arguments = docopt(__doc__)
-    logger = logging.getLogger('root')
-    f_handler = logging.StreamHandler()
-    f_handler.setLevel(logging.INFO)
-    f_format = logging.Formatter('%(levelname)s:%(message)s')
-    f_handler.setFormatter(f_format)
-    logger.addHandler(f_handler)
- 
-    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], logger)
+    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'])

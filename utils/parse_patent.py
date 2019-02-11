@@ -3,29 +3,42 @@ import re
 import sys
 
 class XMLDoc:
-    def __init__(self, filename, intro=False, tables=False, citations=False):
-        self.intro = self.summary = ""
+    def __init__(self, filename, title=False, abstract=False, intro=False, tables=False, citations=False):
+        self.title = ""
+        self.intro = self.abstract = ""
         self.tables = None
         self.nplcit_table = []
 
         self.tree = ET.parse(filename)
         self.root = self.tree.getroot()
+        self.abstract_section = self.root.find('abstract')
         self.citations = self.root.find('us-bibliographic-data-grant').find('us-references-cited')
         self.data = self.root.find('description')
 
-        #self.f = self.parse_section("field of invention")
-        #self.f = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.f)
+        if title:
+            # look into text ../patents/US08685992-20140401.XML 
+            self.title = self.root.find('us-bibliographic-data-grant').find('invention-title').text
+        if abstract:
+            self.abstract = self.parse_abstract()
         if intro:
             self.intro = self.parse_section("background")
-            self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
             self.summary = self.parse_section("summary")
-            self.summary = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.summary)
-            self.intro += ' ' + self.summary
+            self.desc = self.parse_section("description")
+            self.intro = f'{self.intro} {self.summary} {self.desc}'
+            self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
         if tables:
             self.tables = self.parse_all_tables()
         if citations and self.citations:
             self.nplcit_table = self.parse_citations()
 
+
+    def parse_abstract(self):
+        abstract = ''
+        for elem in self.abstract_section:
+            if elem.tag == 'p' and elem.text != None:
+                abstract += elem.text
+
+        return abstract
 
     #Read XML file and collect introduction (Background)
     def parse_section(self, header):

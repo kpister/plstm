@@ -17,6 +17,10 @@ def gen_ngrams(in_text):
         # add trigram
         trigram = f'{bigram} {words[i+2]}'
         sequences.append(trigram)
+
+    sequences.append(f'{words[-2]} {words[-1]}')
+    sequences.append(words[-2])
+    sequences.append(words[-1])
     return sequences
 
 if __name__ == '__main__':

@@ -4,23 +4,26 @@ import sys
 class PatentTSV:
     def __init__(self, name):
         self.name = name
-        self.targets = self.parse_targets()
+        self.file = open(self.name)
+        self.targets = self.parse_header('Target Name Assigned by Curator or DataSource')
+        self.smiles = self.parse_header('Ligand SMILES')
+        self.inchi = self.parse_header('Ligand InChI')
+        self.file.close()
 
-    # returns a list of strings
-    def parse_targets(self):
-        f = open(self.name)
+    def parse_header(self, header_name):
+        self.file.seek(0)
         target_col = -1
-        header = f.readline()
-        for i, val in enumerate(header.split("\t")):
-            if "Target Name" in val:
+        header = self.file.readline()
+        for i, val in enumerate(header.split('\t')):
+            if header_name == val:
                 target_col = i
 
         if target_col == -1:
-            return "Target not found in header"
+            return 'Compound not found'
 
         targets = []
-        for line in f:
-            target = line.split("\t")[target_col:target_col+1]
+        for line in self.file:
+            target = line.split('\t')[target_col:target_col+1]
             if target[0] not in targets:
                 targets.append(target[0])
         return targets

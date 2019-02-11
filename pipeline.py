@@ -2,8 +2,7 @@
 Usage:
     pipeline.py <patent_file> [options]
 
-Options:
-    -h, --help              show this message and exit
+Options: -h, --help              show this message and exit 
     -m, --model FILE   set model file [default: ./model.h5]
     -d, --map FILE   set mapping file [default: ./map.json]
 """
@@ -22,20 +21,16 @@ from generator import gen_ngrams
 from length import pad
 from keras.models import load_model
 
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+
 
 # cross reference against intro
 def printDict(name, dic, logger, key=1):
-    if logger:
-        logger.info(f'Found {len(dic)} possible targets from {name}')
-    else:
-        print(f'Found {len(dic)} possible targets from {name}')
+    logger.info(f'Found {len(dic)} possible targets from {name}')
     if len(dic) != 0:
-        if logger:
-            logger.info('Printing top 10:')
-        else:
-            print('Printing top 10:')
+        logger.info('Printing top 10:')
         for k,v in dic.items():
-            print(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
+            logger.info(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
             """
         for k,v in sorted(dic.items(), key=lambda kv:kv[1][2])[:10]:
             if logger:
@@ -44,7 +39,7 @@ def printDict(name, dic, logger, key=1):
                 print(f"{k} {v[0]*100:2.1f}% {v[1]*100:2.1f}% {v[2]*100:2.1f}%")
                 """
 
-def top10(text, title, model, mapping, key=1, logger=None, errlog=None):
+def top10(text, title, model, mapping, logger, errlog):
     ## Convert to ngram token sequences
     # ngrams :: [sequences]
     ngrams = gen_ngrams(text)
@@ -62,14 +57,9 @@ def top10(text, title, model, mapping, key=1, logger=None, errlog=None):
     # mapping :: .json file
     preds = {}
 
-    if logger:
-        logger.info(f'Parsing {len(ngrams)} possible {title} sequences...')
-    else:
-        print(f'Parsing {len(ngrams)} possible {title} sequences...')
-    if errlog and len(ngrams) == 0:
-        errlog.error(f'{patent_file}:{title}:found 0 sequences')
-    elif len(ngrams) == 0:
-        print(f'{patent_file}:{title}:found 0 sequences')
+    logger.info(f'Parsing {len(ngrams)} possible {title} sequences...')
+    if len(ngrams) == 0:
+        errlog.error(f'{title}:found 0 sequences')
     for seq in ngrams:
         if seq not in preds:
             pred = list(predict_word(seq, model, mapping)[0])
@@ -79,7 +69,7 @@ def top10(text, title, model, mapping, key=1, logger=None, errlog=None):
 
     return preds
 
-def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None): 
+def pipeline(patent_file, model_file, mapping_file, logger, errlog): 
     try:
         model = load_model(model_file)
         with open(mapping_file) as mf:
@@ -93,7 +83,7 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
     # set intro to true when searching cits and intro
 
     doc = XMLDoc(patent_file, title=True, abstract=True, intro=True, citations=True)
-    print('loaded doc')
+    print(f'loaded {patent_file}')
 
     ## Parse related tsv file for true targets
     # tsv file should be correlated in name
@@ -103,16 +93,9 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
         tsvname = tsvname[:tsvname.find("-")] + ".tsv"
         true_targets = '\n'.join(PatentTSV(tsvname).targets)
 
-        if logger:
-            logger.info(f"True proteins (from tsv):\n{true_targets}")
-        else:
-            print(f"True proteins (from tsv):\n{true_targets}")
+        logger.info(f"True proteins (from tsv):\n{true_targets}")
     except Exception as e:
-        print(e)
-        if errlog:
-            errlog.error(f'{patent_file}:{e}\nContinuing')
-        else:
-            print(f'{patent_file}:{e}\nContinuing')
+        errlog.error(f'{patent_file}:{e}\nContinuing')
 
     ## Generate refs
     # read from xml file
@@ -121,8 +104,8 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
     intro = doc.intro.lower()
     abstract = doc.abstract.lower()
     title = doc.title.lower()
-    print(f'Abstract: {abstract}')
-    print(f'Title: {title}')
+    logger.info(f'Abstract: {abstract}')
+    logger.info(f'Title: {title}')
 
     refs = top10(refs, 'references', model, mapping, logger, errlog)
     #intro = top10(intro, 'introduction', model, mapping, logger, errlog)
@@ -131,4 +114,4 @@ def pipeline(patent_file, model_file, mapping_file, logger=None, errlog=None):
 
 if __name__ == '__main__':
     arguments = docopt(__doc__)
-    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'])
+    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], logger=logging, errlog=logging)

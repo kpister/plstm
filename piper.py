@@ -8,8 +8,8 @@ Options:
     -p, --patents PATENT_DIR    directory with patents [default: ../patents/]
     -m, --model FILE            set model file [default: ./model.h5]
     -d, --map FILE              set mapping file [default: ./map.json]
-    -o, --output DIR            set output director [default: 'output/']
-    -e, --error FILE            set error log file [default: 'err.log']
+    -o, --output DIR            set output director [default: output/]
+    -e, --error FILE            set error log file [default: err.log]
 """
 
 
@@ -45,7 +45,7 @@ for patent in patents:
     logging.info(f'Working on {patent}')
     patent_name = os.path.basename(patent)[:-4] + '.info'
 
-    f_handler = logging.FileHandler(f"{arguments['--output']}{patent_name}")
+    f_handler = logging.FileHandler(f"output/{patent_name}")
     f_handler.setLevel(logging.INFO)
     f_handler.setFormatter(f_format)
     logger.addHandler(f_handler)

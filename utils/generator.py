@@ -5,6 +5,9 @@ def gen_ngrams(in_text):
     words = in_text.split(' ')
     sequences = []
 
+    if len(words) < 3:
+        return []
+
     for i in range(len(words)-2):
         # add unigram
         unigram = words[i]

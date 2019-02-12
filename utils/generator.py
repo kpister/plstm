@@ -1,14 +1,24 @@
-import sys
+"""Generator
+Usage:
+    generator.py <in-file> <out-file>
+"""
+
+from docopt import docopt
 
 # Convert large paragraphs into uni-bi-trigram values separated by newlines
 def gen_ngrams(in_text):
-    words = in_text.split(' ')
+    lines = in_text.split('\n')
+    paras = ' '.join(lines)
+    words = [w.strip() for w in paras.split(' ')]
     sequences = []
 
     if len(words) < 3:
         return []
 
     for i in range(len(words)-2):
+        if '' in words[i:i+3]:
+            continue
+
         # add unigram
         unigram = words[i]
         sequences.append(unigram)
@@ -27,17 +37,8 @@ def gen_ngrams(in_text):
     return sequences
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print('Usage: python generator.py in_file out_file')
-        sys.exit(1)
+    args = docopt(__doc__)
 
-    try:
-        in_file = open(sys.argv[1])
-        out_file = open(sys.argv[2], 'w')
-    except:
-        print('Usage: python generator.py in_file out_file')
-        sys.exit(1)
+    with open(args['<in-file>']) as i, open(args['<out-file>'], 'w') as o:
+        o.write('\n'.join(gen_ngrams(i.read())))
     
-    out_file.write('\n'.join(gen_ngrams(in_file.read())))
-    out_file.close()
-    in_file.close()

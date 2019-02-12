@@ -1,8 +1,17 @@
-import sys
+"""Validate Word
+Usage:
+    validate.py <patent-file> [options]
+
+Options:
+    -h, --help          show this message
+    -m, --model FILE    set model file [default: ./model.h5]
+    -d, --map FILE      set mapping file [default: ./map.json]
+"""
+
+from docopt import docopt
 import json
 import numpy as np
-from generator import gen_ngrams
-from length import length
+from preprocess import preprocess
 from keras.models import load_model
 from keras.utils import to_categorical
 
@@ -15,26 +24,27 @@ def predict_word(word, model, mapping):
     return model.predict(s)
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print('Usage: python validate.py model_file map_file patent_file')
-        sys.exit(1)
+    args = docopt(__doc__)
+    model = load_model(args['--model'])
+    mapping = json.load(args['--map'])
+    p = open(args['<patent-file>'])
 
-    try:
-        model = load_model(sys.argv[1])
-        mapping = json.load(open(sys.argv[2]))
-        p = open(sys.argv[3])
-    except Exception as e:
-        print(e)
-        sys.exit(1)
+    ngrams = preprocess(p.read(), seq_len=50)
 
-    gen = gen_ngrams(p.read())
-    seqs = length([x.lower() for x in gen], 30)
+    preds = {}
+    for ngram in ngrams:
+        preds['ngram'] = predict_word(ngram, model, mapping)[0]
 
-    preds = []
-    for seq in seqs:
-        preds.append({'seq':seq, 'pred':predict_word(seq, model, mapping)[0]})
+    output = []
+    for k,v in sorted(preds.items(), key=lambda kv:kv[1][1], reverse=True)[:10]:
+        if v[1] > 0.1:
+            output.append(f"{k} {v[1]*100:2.1f}% {v[2]*100:2.1f}% {v[0]*100:2.1f}%")
 
-    preds.sort(key=lambda x:x['pred'][1])
-    for p in preds:
-        print(f"{p['seq']} {p['pred'][0]*100:2.1f}% {p['pred'][1]*100:2.1f}%")
+    if len(output) == 0:
+        print(f'{bcolors.FAIL}No protein matches{bcolors.ENDC}')
+    else:
+        print(f"Printing top {len(output)}:\n{'~'*50} prot, comp, norm")
+        for s in output:
+            print(s)
+
 

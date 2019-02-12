@@ -18,8 +18,7 @@ sys.path.append('utils/')
 from validate import predict_word
 from parse_patent import XMLDoc
 from parse_tsv import PatentTSV
-from generator import gen_ngrams
-from length import pad
+from preprocess import preprocess
 from keras.models import load_model
 
 class bcolors:
@@ -48,38 +47,30 @@ def printDict(name, dic, logger, errlog):
         errlog.error(f'{bcolors.FAIL}No protein matches{bcolors.ENDC}')
         return
 
-    logger.info('Printing top {len(output)}:')
+    logger.info(f'Printing top {len(output)}:')
     logger.info(f"{'~'*50} prot, comp, norm")
     for s in output:
         logger.info(s)
 
 def top10(text, title, model, mapping, logger, errlog):
-    ## Convert to ngram token sequences
-    # ngrams :: [sequences]
-    ngrams = gen_ngrams(text)
-
-    ## Trim and Pad reference sequences to length
-    # this won't be needed with variable length lstm
-    # ngrams :: [sequences | len(sequences) = 50]
-    # the remaining space on smaller values will be padded
-    ngrams = pad(ngrams, length=50)
+    ngrams = preprocess(text, seq_len=50)
 
     ## Validate the references and intro
     # ngrams  :: list[sequences]
-    # intro :: list[sequences]
     # model :: .h5 file
     # mapping :: .json file
     preds = {}
 
     logger.info(f'Parsing {len(ngrams)} possible {title} sequences...')
-    if len(ngrams) == 0:
-        errlog.error(f'{bcolors.FAIL}{title}:found 0 sequences{bcolors.ENDC}')
     for seq in ngrams:
         if seq not in preds:
             pred = list(predict_word(seq, model, mapping)[0])
             preds[seq] = pred # stored in normal, protien, compound order
 
-    printDict(title, preds, logger, errlog)
+    if len(ngrams) == 0:
+        errlog.error(f'{bcolors.FAIL}{title}:found 0 sequences{bcolors.ENDC}')
+    else:
+        printDict(title, preds, logger, errlog)
 
     return preds
 

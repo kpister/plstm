@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """PLSTM
 Usage:
-    plstm.py --positive=FILE --negative=FILE [options]
+    plstm.py --positive=FILE --negative=FILE --compounds=FILE --blended=FILE [options]
 
 Options:
     -h, --help              show this message and exit
     -p, --positive FILE     set positive input file path
     -n, --negative FILE     set negative input file path
     -b, --blended FILE      set negative input file path
-    -c, --compounds FILE    set negative input file path
+    -c, --compounds FILE    set compount input file path
     --SEQ_LENGTH LEN        set SEQ_LENGTH [default: 50]
     --BATCH_SIZE SIZE       set BATCH_SIZE [default: 64]
     --LSTM_NODES NUM        set quantity of lstm nodes [default: 80]
@@ -99,7 +99,6 @@ if __name__=='__main__':
 
     # Generate Datasets
     # convert each character to an array of one hot encoded vectors
-    #lines = compounds['words'] + proteins['words'] + normal['words']
     lines = blended['words'] + compounds['words'] + proteins['words'] + normal['words']
     X = [to_categorical([mapping[c] for c in l], num_classes=vocab_size) for l in lines]
 

@@ -34,13 +34,24 @@ class bcolors:
 
 
 # cross reference against intro
-def printDict(name, dic, logger):
+def printDict(name, dic, logger, errlog):
     logger.info(f'Found {len(dic)} possible targets from {name}')
-    if len(dic) != 0:
-        logger.info('Printing top 10:')
-        logger.info(f"{'~'*50} prot, comp, norm")
-        for k,v in sorted(dic.items(), key=lambda kv:kv[1][1], reverse=True)[:10]:
-            logger.info(f"{k} {v[1]*100:2.1f}% {v[2]*100:2.1f}% {v[0]*100:2.1f}%")
+    if len(dic) == 0:
+        return
+
+    output = []
+    for k,v in sorted(dic.items(), key=lambda kv:kv[1][1], reverse=True)[:10]:
+        if v[1] > 0.1:
+            output.append(f"{k} {v[1]*100:2.1f}% {v[2]*100:2.1f}% {v[0]*100:2.1f}%")
+
+    if len(output) == 0:
+        errlog.error(f'{bcolors.FAIL}No protein matches{bcolors.ENDC}')
+        return
+
+    logger.info('Printing top {len(output)}:')
+    logger.info(f"{'~'*50} prot, comp, norm")
+    for s in output:
+        logger.info(s)
 
 def top10(text, title, model, mapping, logger, errlog):
     ## Convert to ngram token sequences
@@ -62,13 +73,13 @@ def top10(text, title, model, mapping, logger, errlog):
 
     logger.info(f'Parsing {len(ngrams)} possible {title} sequences...')
     if len(ngrams) == 0:
-        errlog.error(f'{title}:found 0 sequences')
+        errlog.error(f'{bcolors.FAIL}{title}:found 0 sequences{bcolors.ENDC}')
     for seq in ngrams:
         if seq not in preds:
             pred = list(predict_word(seq, model, mapping)[0])
-            preds[seq] = pred
+            preds[seq] = pred # stored in normal, protien, compound order
 
-    printDict(title, preds, logger)
+    printDict(title, preds, logger, errlog)
 
     return preds
 
@@ -107,6 +118,8 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     intro = doc.intro.lower()
     abstract = doc.abstract.lower()
     title = doc.title.lower()
+    keywords = doc.keywords.lower()
+
     logger.info(f'Abstract: {abstract}')
     logger.info(f'Title: {title}')
 
@@ -114,6 +127,7 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     #intro = top10(intro, 'introduction', model, mapping, logger, errlog)
     abstract = top10(abstract, 'abstract', model, mapping, logger, errlog)
     title = top10(title, 'title', model, mapping, logger, errlog)
+    keywords = top10(keywords, 'keywords', model, mapping, logger, errlog)
 
     return 0
 

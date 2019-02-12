@@ -4,9 +4,9 @@ import sys
 
 class XMLDoc:
     def __init__(self, filename, title=False, abstract=False, intro=False, tables=False, citations=False):
-        self.title = ""
-        self.intro = self.abstract = ""
-        self.tables = None
+        self.title = ''
+        self.intro = self.abstract = ''
+        #self.tables = None
         self.nplcit_table = []
 
         self.tree = ET.parse(filename)
@@ -21,13 +21,16 @@ class XMLDoc:
         if abstract:
             self.abstract = self.parse_abstract()
         if intro:
-            self.intro = self.parse_section("background")
+            self.background = self.parse_section("background")
             self.summary = self.parse_section("summary")
             self.desc = self.parse_section("description")
-            self.intro = f'{self.intro} {self.summary} {self.desc}'
+
+            self.intro = f'{self.background} {self.summary} {self.desc}'
             self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
-        if tables:
-            self.tables = self.parse_all_tables()
+
+            self.keywords = self.keyword_section('invention', 2)
+        #if tables:
+            #self.tables = self.parse_all_tables()
         if citations and self.citations:
             self.nplcit_table = self.parse_citations()
 
@@ -90,12 +93,32 @@ class XMLDoc:
                 
         return nplcit_table
 
+    #function looks for keyword in sections. If keyword encountered, collects the next n sentences
+    # defined by num_sentences 
+    def keyword_section(self, keyword, num_sentences):
+        def extract_keywords(text):
+            sentences = ''
+            text = text.split('.')
+            for s in text:
+                if keyword in s and s not in sentences:
+                    num_collected = 0
+                    index = text.index(s)
+                    while(index < len(text) and num_collected < num_sentences):
+                        sentences += s
+                        num_collected += 1
+                        index += 1
+            return sentences
+
+        if self.intro:
+            return extract_keywords(self.intro)
+
+
+
 if __name__ == '__main__':
     try:
         filename = sys.argv[1]
         doc = XMLDoc(filename, intro=True, citations=True)
-        print(doc.intro)
-        print("\n".join(doc.nplcit_table))
+        print(doc.keywords)
     except:
         print('Usage: python parse_patent.py patent_file.xml')
 

@@ -1,22 +1,20 @@
 import random
 
-normal = open('text/trigram_wiki.txt').read().split('\n')
-prot = open('text/protein_names.txt').read().split('\n')
+neg = open('text/neg.txt').read().split('\n')
+pos = open('text/pos.txt').read().split('\n')
 
-out = []
-w = open('text/blended.txt', 'w')
 
 quant = 500000
-nw = random.sample(normal, quant)
-pw = random.sample(prot, quant)
+w = open('text/blended.txt', 'w')
 
-for i in range(quant):
-    a = nw[i].strip() + ' ' + pw[i].strip()
-    out.append(a)
-    a = pw[i].strip() + ' ' + pw[quant-1-i].strip()
-    out.append(a)
-
-w.write('\n'.join(out))
+for k in range(10):
+    out = []
+    nw = random.sample(neg, quant)
+    pw = random.sample(pos, quant)
+    for i in range(quant):
+        out.append(f'{nw[i].strip()} {pw[i].strip()}')
+        out.append(f'{pw[i].strip()} {nw[quant-1-i].strip()}')
+    w.write('\n'.join(out))
 
 
 

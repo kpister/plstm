@@ -1,6 +1,6 @@
 """Preprocess
 Usage: 
-    preprocess.py <in-file>
+    preprocess.py <in-file> <out-file>
 
 """
 
@@ -10,10 +10,10 @@ from generator import gen_ngrams
 from pad import pad
 
 def preprocess_word(word):
-    new_word = ''
     for i, c in enumerate(reversed(word)):
         if c.isalnum() or c in [')',']']:
             return word[:len(word)-i]
+    return None
 
 # given a body of text return:
 # a list of uni-bi-tri gram sequences s.t.
@@ -23,7 +23,11 @@ def preprocess_word(word):
 def preprocess(text, seq_len=50, sample=-1):
     ## Remove non-internal punctuation
     words = text.split(' ')
-    pwords = [pwords.append(preprocess_word(w)) for w in words]
+    pwords = []
+    for word in words:
+        pw = preprocess_word(word)
+        if pw:
+            pwords.append(pw)
     ptext = ' '.join(pwords)
 
     ## Convert to ngram token sequences
@@ -42,5 +46,7 @@ def preprocess(text, seq_len=50, sample=-1):
     return ngrams
 
 if __name__ == '__main__':
-    arguments = docopt(__doc__)
-    preprocess(arguments['<in-file>'])
+    args = docopt(__doc__)
+    with open(args['<in-file>']) as i, open(args['<out-file>'], 'w') as o:
+        ngrams = preprocess(i.read())
+        o.write('\n'.join(ngrams))

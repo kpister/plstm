@@ -104,7 +104,7 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
 
     ## Generate refs
     # read from xml file
-    # refs :: paragraph (lowercase)
+    # refs :: paragraph
     refs = '\n'.join(doc.nplcit_table).lower()
     intro = doc.intro.lower()
     abstract = doc.abstract.lower()

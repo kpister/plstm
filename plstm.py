@@ -9,31 +9,38 @@ Options:
     -n, --negative FILE     set negative input file path
     -b, --blended FILE      set negative input file path
     -c, --compounds FILE    set compount input file path
+    --INPUT_SIZE QUANTITY   set sample size from each file [default: 500000]
     --SEQ_LENGTH LEN        set SEQ_LENGTH [default: 50]
     --BATCH_SIZE SIZE       set BATCH_SIZE [default: 64]
     --LSTM_NODES NUM        set quantity of lstm nodes [default: 80]
     --DROPOUT PERCENT       set percent dropout [default: 0.20]
     --TEST_PERCENT TP       set test and validation percent [default: 0.15]
+    --LEARNING_RATE FLOAT   set learning rate for adam optimizer [default: 0.001]
+    --EPOCHS COUNT          set max number of epochs [default: 20]
 """
 
+import random
+import sys
 import numpy as np
 import json
 from sys import exit
 from numpy import array
 from keras.utils import to_categorical
 from keras.models import Sequential
-from keras.layers import Dropout, Dense, LSTM, Bidirectional, Embedding
+from keras.layers import Dropout, Dense, LSTM, Conv1D, Flatten
 from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras import optimizers
 from docopt import docopt
 
 # following https://machinelearningmastery.com/develop-character-based-neural-language-model-keras/
 # and       https://github.com/enriqueav/lstm_lyrics/blob/master/classifier_train.py
 
-def load_doc(filename, valid_chars=None):
+def load_doc(filename, input_size, seq_len, valid_chars=None):
     with open(filename) as f:
         text = f.read()
 
-    words = [word.strip() for word in text.split('\n')]
+    words = [word.strip() for word in text.split('\n') if len(word.strip()) == seq_len]
+    words = random.sample(words, min(len(words), input_size))
 
     if valid_chars == None:
         return {'words': words, 'text': text}
@@ -62,35 +69,53 @@ def shuffle_and_split_training_set(sentences_original, labels_original, test_per
         tmp_labels.append(labels_original[i])
     val_cut_index = int(len(sentences_original) * (1.0-(2.0*test_percent)))
     test_cut_index = int(len(sentences_original) * (1.0-test_percent))
+
+    tmp_sentences = array(tmp_sentences)
+    tmp_labels = array(tmp_labels)
+
     x_train, x_val, x_test = tmp_sentences[:val_cut_index], tmp_sentences[val_cut_index:test_cut_index], tmp_sentences[test_cut_index:]
     y_train, y_val, y_test = tmp_labels[:val_cut_index], tmp_labels[val_cut_index:test_cut_index], tmp_labels[test_cut_index:]
+    del tmp_sentences
+    del tmp_labels
 
-    print("Training set = %d\nTest set = %d" % (len(x_train), len(y_test)))
-    return array(x_train), array(y_train), array(x_val), array(y_val), array(x_test), array(y_test)
+    print(f"Training set = {len(x_train)}\nTest set = {len(y_test)}\nValidation set = {len(x_val)}")
+    return x_train, y_train, x_val, y_val, x_test, y_test
 
 def get_model(vocab_size, arguments):
     # define model
+    adam = optimizers.Adam(lr=float(arguments['--LEARNING_RATE']))
+
     model = Sequential()
+    # LSTM Code
     model.add(LSTM(int(arguments['--LSTM_NODES']), input_shape=(int(arguments['--SEQ_LENGTH']), vocab_size)))
+
+    # CNN code
+    #model.add(Conv1D(nodes, activation='relu', input_shape=(int(arguments['--SEQ_LENGTH']), vocab_size), kernel_size=3))
+    #model.add(Flatten())
+
     model.add(Dropout(float(arguments['--DROPOUT'])))
     model.add(Dense(3, activation='softmax'))
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
     print(model.summary())
     return model
 
 if __name__=='__main__':
     arguments = docopt(__doc__)
 
+    input_size = int(arguments['--INPUT_SIZE'])
+    seq_len = int(arguments['--SEQ_LENGTH'])
+
     # Load data
-    proteins  = load_doc(arguments['--positive'])
-    normal    = load_doc(arguments['--negative'], list(set(proteins['text'])))
-    blended   = load_doc(arguments['--blended'], list(set(proteins['text'])))
-    compounds = load_doc(arguments['--compounds'], list(set(proteins['text'])))
+    proteins  = load_doc(arguments['--positive'], input_size, seq_len)
+    compounds = load_doc(arguments['--compounds'], input_size, seq_len)
+
+    valid_chars = list(set(proteins['text'] + compounds['text'] + '!'))
+    normal    = load_doc(arguments['--negative'], input_size, seq_len, valid_chars)
+    blended   = load_doc(arguments['--blended'], input_size, seq_len, valid_chars)
     print('Files loaded')
 
     # mapping from chars to nums
-    chars = sorted(list(set(proteins['text'] + '!')))
-    mapping = dict((c, i) for i, c in enumerate(chars))
+    mapping = dict((c, i) for i, c in enumerate(valid_chars))
     vocab_size = len(mapping)
 
     with open('map.json', 'w') as mapping_file:
@@ -101,20 +126,24 @@ if __name__=='__main__':
     # convert each character to an array of one hot encoded vectors
     lines = blended['words'] + compounds['words'] + proteins['words'] + normal['words']
     X = [to_categorical([mapping[c] for c in l], num_classes=vocab_size) for l in lines]
-
     y = to_categorical([0]*len(blended['words']) + [2]*len(compounds['words']) + [1]*len(proteins['words']) + [0]*len(normal['words']), num_classes=3)
+
     x_train, y_train, x_val, y_val, x_test, y_test = shuffle_and_split_training_set(X, y, float(arguments['--TEST_PERCENT']))
-    print('Created dataset')
 
     # Create Model
-    print('Generating model')
+    print('Created dataset\nGenerating model')
     model = get_model(vocab_size, arguments)
 
     # fit model
-    checkpoint = ModelCheckpoint('weights.{epoch:02d}-{val_loss:.2f}.hdf5')
+    checkpoint = ModelCheckpoint('weights/weights.{epoch:02d}-{val_loss:.2f}.hdf5')
     early_stopping = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=2)
-    model.fit(x_train, y_train, epochs=20, verbose=2, callbacks=[checkpoint, early_stopping], validation_data=(x_val, y_val))
+    model.fit(x_train, y_train, 
+            batch_size=int(arguments['--BATCH_SIZE']), 
+            epochs=int(arguments['--EPOCHS']), verbose=2, 
+            callbacks=[checkpoint, early_stopping], 
+            validation_data=(x_val, y_val))
 
     # save the model to file and evaluate
     model.save('model.h5')
+
     model.evaluate(x_test, y_test, batch_size=int(arguments['--BATCH_SIZE']))

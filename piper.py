@@ -10,6 +10,7 @@ Options:
     -d, --map FILE              set mapping file [default: ./map.json]
     -o, --output DIR            set output director [default: output/]
     -e, --error FILE            set error log file [default: err.log]
+    -k K-NN                     set number of nearest neighbors [default: 4]        
     --ignore-errors             set ignore-errors flag [default: False]
 """
 
@@ -39,19 +40,19 @@ arguments = docopt(__doc__)
 patents = sorted(glob(f"{arguments['--patents']}*.XML"))
 errlog = genLogger(arguments['--error'], logging.ERROR)
 
-logger = logging.getLogger('output')
+logger = logging.getLogger('output2')
 f_format = logging.Formatter('%(levelname)s:%(message)s')
 # Set up for multithreading
 for patent in patents:
     logging.info(f'Working on {patent}')
     patent_name = os.path.basename(patent)[:-4] + '.info'
 
-    f_handler = logging.FileHandler(f"output/{patent_name}")
+    f_handler = logging.FileHandler(f"{arguments['--output']}/{patent_name}")
     f_handler.setLevel(logging.INFO)
     f_handler.setFormatter(f_format)
     logger.addHandler(f_handler)
 
-    err = pipeline(patent, arguments['--model'], arguments['--map'], logger, errlog)
+    err = pipeline(patent, arguments['--model'], arguments['--map'], int(arguments['-k']), logger, errlog)
     logging.info(f'Finished working on {patent}')
     logger.removeHandler(f_handler)
     f_handler.close()

@@ -6,6 +6,7 @@ Options:
     -h, --help          show this message and exit 
     -m, --model FILE    set model file [default: ./model.h5]
     -d, --map FILE      set mapping file [default: ./map.json]
+    -k K-NN             set number of nearest neighbors [default: 4]
 """
 
 import json
@@ -19,7 +20,10 @@ from validate import predict_word
 from parse_patent import XMLDoc
 from parse_tsv import PatentTSV
 from preprocess import preprocess
+from preprocess import remove_common
+import tensorflow as tf
 from keras.models import load_model
+from choose import best_options
 
 class bcolors:
     HEADER = '\033[95m'
@@ -53,7 +57,8 @@ def printDict(name, dic, logger, errlog):
         logger.info(s)
 
 def top10(text, title, model, mapping, logger, errlog):
-    ngrams = preprocess(text, seq_len=50)
+    common = open('words.txt').read().split('\n')
+    ngrams = preprocess(remove_common(text, common), seq_len=50)
 
     ## Validate the references and intro
     # ngrams  :: list[sequences]
@@ -74,14 +79,22 @@ def top10(text, title, model, mapping, logger, errlog):
 
     return preds
 
-def pipeline(patent_file, model_file, mapping_file, logger, errlog): 
+def pipeline(patent_file, model_file, mapping_file, k, logger, errlog): 
     try:
+        # use one gpu, twice as much testing. 
+        # create a model class?
+
+        #config = tf.ConfigProto( device_count = {'GPU': 1 , 'CPU': 56} ) 
+        #sess = tf.Session(config=config) 
+        #keras.backend.set_session(sess)
+
+
         model = load_model(model_file)
         with open(mapping_file) as mf:
             mapping = json.load(mf)
     except: 
         print(f'{bcolors.FAIL}Input failure{bcolors.ENDC}')
-        return 1
+        return 1 # Error code
  
     ## Parse input xml file
     # filename should be direct path from current location
@@ -105,24 +118,41 @@ def pipeline(patent_file, model_file, mapping_file, logger, errlog):
     ## Generate refs
     # read from xml file
     # refs :: paragraph
-    refs = '\n'.join(doc.nplcit_table).lower()
-    intro = doc.intro.lower()
-    abstract = doc.abstract.lower()
-    title = doc.title.lower()
-    keywords = doc.keywords.lower()
+    refs = '\n'.join(doc.nplcit_table)
+    intro = doc.intro
+    abstract = doc.abstract
+    title = doc.title
+    keywords = doc.keywords
+    whole = doc.whole
 
     logger.info(f'Abstract: {abstract}')
     logger.info(f'Title: {title}')
 
     refs = top10(refs, 'references', model, mapping, logger, errlog)
-    #intro = top10(intro, 'introduction', model, mapping, logger, errlog)
+    intro = top10(intro, 'introduction', model, mapping, logger, errlog)
     abstract = top10(abstract, 'abstract', model, mapping, logger, errlog)
     title = top10(title, 'title', model, mapping, logger, errlog)
     keywords = top10(keywords, 'keywords', model, mapping, logger, errlog)
+    #whole = top10(whole, 'whole', model, mapping, logger, errlog)
+
+    seqs = []
+    seqs += [(k, v[1]) for k, v in refs.items() if v[1] > 0.2]
+    seqs += [(k, v[1]) for k, v in abstract.items() if v[1] > 0.2]
+    seqs += [(k, v[1]) for k, v in title.items() if v[1] > 0.2]
+    seqs += [(k, v[1]) for k, v in keywords.items() if v[1] > 0.2]
+    seqs += [(k, v[1]) for k, v in intro.items() if v[1] > 0.2]
+
+    logger.info('Guesses:')
+    if len(seqs) == 0:
+        return 0
+
+    guess = best_options(seqs, k)
+    for g in guess:
+        logger.info(g)
 
     return 0
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
     arguments = docopt(__doc__)
-    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], logger=logging, errlog=logging)
+    pipeline(arguments['<patent_file>'], arguments['--model'], arguments['--map'], int(arguments['-k']), logger=logging, errlog=logging)

@@ -44,7 +44,7 @@ def predict(text, model, device_id):
     # model :: pytorch model
 
     preds = {}
-    common = open('words.txt').read().split('\n')
+    common = open('utils/words.txt').read().split('\n')
     ngrams = preprocess(remove_common(text, common), seq_len=50)
 
     for ngram, pred in zip(ngrams, predict_batch(ngrams, model, device_id=device_id)):

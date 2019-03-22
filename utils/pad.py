@@ -3,7 +3,6 @@ Usage:
     pad.py <in-file> <out-file> <size>
 """
 
-from docopt import docopt
 
 def pad(lines, length):
     sequences = []
@@ -18,6 +17,7 @@ def pad(lines, length):
     return sequences
 
 if __name__ == '__main__':
+    from docopt import docopt
     args = docopt(__doc__)
 
     with open(args['<in-file>']) as i, open(args['<out-file>'], 'w') as o:

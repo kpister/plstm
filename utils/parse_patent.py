@@ -1,13 +1,18 @@
 import xml.etree.ElementTree as ET
 import re
 import sys
+import unicodedata
+
+def unicodeToAscii(s):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn' and ord(c) < 128 )
 
 class XMLDoc:
-    def __init__(self, filename, title=False, abstract=False, intro=False, tables=False, citations=False):
-        self.title = ''
-        self.intro = self.abstract = ''
+    def __init__(self, filename, tables=False):
         #self.tables = None
         self.nplcit_table = []
+        self.references = ""
 
         self.tree = ET.parse(filename)
         self.root = self.tree.getroot()
@@ -15,34 +20,34 @@ class XMLDoc:
         self.citations = self.root.find('us-bibliographic-data-grant').find('us-references-cited')
         self.data = self.root.find('description')
 
-        if title:
-            # look into text ../patents/US08685992-20140401.XML 
-            self.title = self.root.find('us-bibliographic-data-grant').find('invention-title').text
-        if abstract:
-            self.abstract = self.parse_abstract()
-        if intro:
-            self.background = self.parse_section("background")
-            self.summary = self.parse_section("summary")
-            self.desc = self.parse_section("description")
+        # look into text ../patents/US08685992-20140401.XML 
+        title = self.root.find('us-bibliographic-data-grant').find('invention-title').text
+        self.title = unicodeToAscii(title)
 
-            self.intro = f'{self.background} {self.summary} {self.desc}'
-            self.intro = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.intro)
+        self.abstract = unicodeToAscii(self.parse_abstract())
 
-            self.whole = self.parse_section()
-            self.whole = re.sub(r'\s\([a-zA-Z,.\s&]*\s*\d{4}[\)]','',self.whole)
-            self.keywords = self.keyword_section('invention', 2)
-            self.keywords = "".join(i for i in self.keywords if ord(i) < 128)
+        background = unicodeToAscii(self.parse_section("background"))
+        summary = unicodeToAscii(self.parse_section("summary"))
+        desc = unicodeToAscii(self.parse_section("description"))
+
+        self.intro = f'{background} {summary} {desc}'
+        self.whole_desc = unicodeToAscii(self.parse_section())
+        #self.whole = unicodeToAscii(self.all())
+        self.keywords, _ = self.keyword_section('invention', 2)
+        self.keypatent, _ = self.keyword_section('patent', 2)
+
         #if tables:
             #self.tables = self.parse_all_tables()
-        if citations and self.citations:
+        if self.citations:
             self.nplcit_table = self.parse_citations()
+            self.references = '\n'.join(self.nplcit_table)
 
 
     def parse_abstract(self):
         abstract = ''
         for elem in self.abstract_section:
             if elem.tag == 'p' and elem.text != None:
-                abstract += elem.text
+                abstract += elem.text + ' '
 
         return abstract
 
@@ -77,9 +82,9 @@ class XMLDoc:
                             section += ' '
 
                     if child.tail != None and re.search('[a-zA-Z0-9]',child.tail):
-                        section += child.tail
+                        section += child.tail + ' '
             
-        return section 
+        return section
 
     #Read XML file and organizes all citations into two table based on type
     def parse_citations(self):
@@ -93,7 +98,8 @@ class XMLDoc:
                     cit_name = cit_name.split('“')[1]
                 if '”' in cit_name:
                     cit_name = cit_name.split('”')[0]
-                    nplcit_table.append(cit_name)
+                    c = unicodeToAscii(cit_name)
+                    nplcit_table.append(c)
                 
         return nplcit_table
 
@@ -114,8 +120,13 @@ class XMLDoc:
                         index += 1
             return sentences
 
-        if self.whole:
-            return extract_keywords(self.whole)
+        desc = whole = ""
+        if self.whole_desc:
+            desc = extract_keywords(self.whole_desc)
+
+        #if self.whole:
+            #whole = extract_keywords(self.whole)
+        return (desc, whole)
 
 
 

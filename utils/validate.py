@@ -4,29 +4,53 @@ Usage:
 
 Options:
     -h, --help          show this message
-    -m, --model FILE    set model file [default: ./model.h5]
-    -d, --map FILE      set mapping file [default: ./map.json]
+    -m, --model FILE    set model file [default: ./model.pkl]
+    -d, --device DEV    set the device {'cuda', 'cpu'} [default: cuda]
 """
 
-from docopt import docopt
-import json
-import numpy as np
-from preprocess import preprocess
-from keras.models import load_model
-from keras.utils import to_categorical
+import torch
 
-def predict_word(word, model, mapping):
-    sequence = np.array([mapping.get(char, len(mapping)-1) for char in word])
-    sequence = np.array([to_categorical(x, num_classes=len(mapping)) for x in sequence])
-    s = np.empty([1, sequence.shape[0], sequence.shape[1]])
-    s[0] = sequence
+# Turn a line into a <line_length x 1 x n_letters>,
+# or an array of one-hot letter vectors
+def lineToTensor(line, vocab_size=128):
+    tensor = torch.zeros(len(line), vocab_size)
+    for li, letter in enumerate(line):
+        tensor[li][ord(letter)] = 1
+    return tensor
 
-    return model.predict(s)
+def predict_batch(x, model, vocab_size=128, device_id='cuda'):
+    if len(x) == 0:
+        return []
+
+    batch_size = 1000
+    device = torch.device(device_id)
+    predictions = []
+
+    model.eval()
+
+    with torch.no_grad():
+        model.to(device)
+        for i in range(0, len(x) + batch_size, batch_size):
+            end = min(i+batch_size, len(x))
+            if end <= i:
+                break
+            batch_x = torch.stack([lineToTensor(word) for word in x[i:end]]).permute(1,0,2)
+            if device_id == 'cuda':
+                batch_x = batch_x.cuda()
+
+            outputs = model(batch_x).squeeze(0)
+            predictions += [el for el in outputs]
+    return predictions
 
 if __name__ == '__main__':
+    from preprocess import preprocess
+    from docopt import docopt
+    import sys
+
+    print("STATUS: BROKEN")
+    sys.exit(1)
     args = docopt(__doc__)
     model = load_model(args['--model'])
-    mapping = json.load(args['--map'])
     p = open(args['<patent-file>'])
 
     ngrams = preprocess(p.read(), seq_len=50)

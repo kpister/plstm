@@ -6,56 +6,36 @@ Options:
     -h, --help                  show this message and exit
     -v, --verbose               print logs [default: True]
     -p, --patents PATENT_DIR    directory with patents [default: ../patents/]
-    -m, --model FILE            set model file [default: ./model.h5]
-    -d, --map FILE              set mapping file [default: ./map.json]
+    -m, --model FILE            set model director [default: ./model.pkl]
     -o, --output DIR            set output director [default: output/]
-    -e, --error FILE            set error log file [default: err.log]
-    -k K-NN                     set number of nearest neighbors [default: 4]        
-    --ignore-errors             set ignore-errors flag [default: False]
 """
 
 
 import os
 import sys
-import queue
-import logging
 from docopt import docopt
 from glob import glob
+from load_model import LSTMClassifier
+
+sys.path.append('utils/')
 from pipeline import pipeline
-
-# root logger
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-
-# individual file loggers
-def genLogger(name, level):
-    logger = logging.getLogger(name)
-    f_handler = logging.FileHandler(name)
-    f_handler.setLevel(level)
-    f_format = logging.Formatter('%(levelname)s:%(message)s')
-    f_handler.setFormatter(f_format)
-    logger.addHandler(f_handler)
-    return logger
 
 arguments = docopt(__doc__)
 patents = sorted(glob(f"{arguments['--patents']}*.XML"))
-errlog = genLogger(arguments['--error'], logging.ERROR)
 
-logger = logging.getLogger('output2')
-f_format = logging.Formatter('%(levelname)s:%(message)s')
 # Set up for multithreading
-for patent in patents:
-    logging.info(f'Working on {patent}')
-    patent_name = os.path.basename(patent)[:-4] + '.info'
+for patent in patents[:50]:
+    try:
+        model = LSTMClassifer(128, 80, 3)
+        model.load_state_dict(torch.load(arguments['--model']))
+        output = pipeline(patent, model)
+        print(f'Working on {patent}')
 
-    f_handler = logging.FileHandler(f"{arguments['--output']}/{patent_name}")
-    f_handler.setLevel(logging.INFO)
-    f_handler.setFormatter(f_format)
-    logger.addHandler(f_handler)
-
-    err = pipeline(patent, arguments['--model'], arguments['--map'], int(arguments['-k']), logger, errlog)
-    logging.info(f'Finished working on {patent}')
-    logger.removeHandler(f_handler)
-    f_handler.close()
-
-    if err != 0 and not arguments['--ignore-errors']:
-        break
+        patent_name = os.path.basename(patent)[:-4] + '.info'
+        filename = f"{arguments['--output']}{patent_name}"
+        with open(filename, 'w') as f:
+            f.write('\n'.join(output))
+        print(f'Finished working on {patent}')
+    except Exception as e:
+        print(f'Exiting with exception:{e}')
+        sys.exit(1)

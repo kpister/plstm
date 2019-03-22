@@ -10,140 +10,185 @@ Options:
     -b, --blended FILE      set negative input file path
     -c, --compounds FILE    set compount input file path
     --INPUT_SIZE QUANTITY   set sample size from each file [default: 500000]
-    --SEQ_LENGTH LEN        set SEQ_LENGTH [default: 50]
     --BATCH_SIZE SIZE       set BATCH_SIZE [default: 64]
     --LSTM_NODES NUM        set quantity of lstm nodes [default: 80]
     --DROPOUT PERCENT       set percent dropout [default: 0.20]
-    --TEST_PERCENT TP       set test and validation percent [default: 0.15]
     --LEARNING_RATE FLOAT   set learning rate for adam optimizer [default: 0.001]
     --EPOCHS COUNT          set max number of epochs [default: 20]
+    --PRINT_EVERY COUNT     set how often to display output in epochs [default: 1]
+
+Notes:
+    Vocab size fixed at 128 (ordinal of a letter in ascii)
 """
 
 import random
-import sys
-import numpy as np
-import json
-from sys import exit
-from numpy import array
-from keras.utils import to_categorical
-from keras.models import Sequential
-from keras.layers import Dropout, Dense, LSTM, Conv1D, Flatten
-from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras import optimizers
 from docopt import docopt
+
+import torch 
+import torch.nn as nn
+from torch_model import LSTMClassifier
+
+import time
+import math
 
 # following https://machinelearningmastery.com/develop-character-based-neural-language-model-keras/
 # and       https://github.com/enriqueav/lstm_lyrics/blob/master/classifier_train.py
+# and       https://github.com/spro/practical-pytorch/blob/master/char-rnn-classification/data.py
 
-def load_doc(filename, input_size, seq_len, valid_chars=None):
+# Turn a Unicode string to plain ASCII, thanks to http://stackoverflow.com/a/518232/2809427
+
+vocab_size = 128
+
+# Turn a line into a <line_length x 1 x n_letters>,
+# or an array of one-hot letter vectors
+def lineToTensor(line):
+    tensor = torch.zeros(len(line), vocab_size)
+    for li, letter in enumerate(line):
+        tensor[li][ord(letter)] = 1
+    return tensor
+
+# return a list of size "input_size" sampled from the file.
+# removes sequences of incorrect length TODO remove this
+# removes non-ascii values from text
+def load_doc(filename, input_size):
     with open(filename) as f:
-        text = f.read()
+        lines = f.read().split('\n')
 
-    words = [word.strip() for word in text.split('\n') if len(word.strip()) == seq_len]
-    words = random.sample(words, min(len(words), input_size))
+    words = [word.strip() for word in lines]
+    return random.sample(words, min(len(words), input_size))
 
-    if valid_chars == None:
-        return {'words': words, 'text': text}
-
-    # if valid chars is non-empty, make sure everything conforms to it
-    vwords = []
-    for word in words:
-        w = ""
-        for c in word:
-            # replace c with !
-            if c not in valid_chars:
-                w += "!"
-            else:
-                w += c
-        vwords.append(w)
-    return {'words': vwords, 'text': text}
-
-
-def shuffle_and_split_training_set(sentences_original, labels_original, test_percent):
-    # shuffle at unison
-    print('Shuffling sentences')
-    tmp_sentences = []
-    tmp_labels = []
-    for i in np.random.permutation(len(sentences_original)):
-        tmp_sentences.append(sentences_original[i])
-        tmp_labels.append(labels_original[i])
-    val_cut_index = int(len(sentences_original) * (1.0-(2.0*test_percent)))
-    test_cut_index = int(len(sentences_original) * (1.0-test_percent))
-
-    tmp_sentences = array(tmp_sentences)
-    tmp_labels = array(tmp_labels)
-
-    x_train, x_val, x_test = tmp_sentences[:val_cut_index], tmp_sentences[val_cut_index:test_cut_index], tmp_sentences[test_cut_index:]
-    y_train, y_val, y_test = tmp_labels[:val_cut_index], tmp_labels[val_cut_index:test_cut_index], tmp_labels[test_cut_index:]
-    del tmp_sentences
-    del tmp_labels
-
-    print(f"Training set = {len(x_train)}\nTest set = {len(y_test)}\nValidation set = {len(x_val)}")
-    return x_train, y_train, x_val, y_val, x_test, y_test
-
-def get_model(vocab_size, arguments):
+def get_model(args):
     # define model
-    adam = optimizers.Adam(lr=float(arguments['--LEARNING_RATE']))
+    model = LSTMClassifier(input_dim=vocab_size, 
+                          hidden_dim=int(args['--LSTM_NODES']), 
+                          output_dim=3)
 
-    model = Sequential()
-    # LSTM Code
-    model.add(LSTM(int(arguments['--LSTM_NODES']), input_shape=(int(arguments['--SEQ_LENGTH']), vocab_size)))
+    optimiser = torch.optim.Adam(model.parameters(), lr=float(args['--LEARNING_RATE']))
+    loss = nn.CrossEntropyLoss()
 
-    # CNN code
-    #model.add(Conv1D(nodes, activation='relu', input_shape=(int(arguments['--SEQ_LENGTH']), vocab_size), kernel_size=3))
-    #model.add(Flatten())
+    return (model, optimiser, loss)
 
-    model.add(Dropout(float(arguments['--DROPOUT'])))
-    model.add(Dense(3, activation='softmax'))
-    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
-    print(model.summary())
-    return model
+
+def train(model, x, y, batch_size, optimizer, criterion, device):
+    epoch_loss = 0
+
+    model.train()
+
+    combined = list(zip(x, y))
+    random.shuffle(combined)
+    x[:], y[:] = zip(*combined)
+
+    with torch.cuda.device(1):
+        model.to(device)
+        for i in range(0, len(y), batch_size):
+            optimizer.zero_grad()
+
+            batch_x = torch.stack([lineToTensor(word) for word in x[i:i+batch_size]]).permute(1,0,2).cuda()
+            batch_y = torch.tensor(y[i:i+batch_size], dtype=torch.long).cuda()
+
+            predictions = model(batch_x).squeeze(0)
+            loss = criterion(predictions, batch_y)
+
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+
+    return epoch_loss / len(y) * batch_size
+
+# Run a forward pass on the data outputing the percent correct
+def evaluate(test_x, test_y, batch_size, model):
+    correct = 0
+    total = 0
+    
+    model.eval()
+    with torch.no_grad() and torch.cuda.device(1):
+        model.to(device)
+        for i in range(0, len(test_y), batch_size):
+
+            batch_x = torch.stack([lineToTensor(word) for word in x[i:i+batch_size]]).permute(1,0,2).cuda()
+            batch_y = torch.tensor(y[i:i+batch_size], dtype=torch.long).cuda()
+
+            outputs = model(batch_x).squeeze(0)
+            _, predicted = torch.max(outputs.data, 1)
+            total += batch_y.size(0)
+            correct += (predicted == batch_y).sum().item()
+    return correct / total
 
 if __name__=='__main__':
     arguments = docopt(__doc__)
 
-    input_size = int(arguments['--INPUT_SIZE'])
-    seq_len = int(arguments['--SEQ_LENGTH'])
+    epochs      = int(arguments['--EPOCHS'])
+    input_size  = int(arguments['--INPUT_SIZE'])
+    batch_size  = int(arguments['--BATCH_SIZE'])
+    print_every = int(arguments['--PRINT_EVERY'])
 
     # Load data
-    proteins  = load_doc(arguments['--positive'], input_size, seq_len)
-    compounds = load_doc(arguments['--compounds'], input_size, seq_len)
-
-    valid_chars = list(set(proteins['text'] + compounds['text'] + '!'))
-    normal    = load_doc(arguments['--negative'], input_size, seq_len, valid_chars)
-    blended   = load_doc(arguments['--blended'], input_size, seq_len, valid_chars)
+    proteins  = load_doc(arguments['--positive'], input_size)
+    compounds = load_doc(arguments['--compounds'], input_size)
+    normal    = load_doc(arguments['--negative'], input_size)
+    normal   += load_doc(arguments['--blended'], input_size)
     print('Files loaded')
 
-    # mapping from chars to nums
-    mapping = dict((c, i) for i, c in enumerate(valid_chars))
-    vocab_size = len(mapping)
+    # Shuffle data; probably unnecessary
+    random.shuffle(proteins)
+    random.shuffle(compounds)
+    random.shuffle(normal)
 
-    with open('map.json', 'w') as mapping_file:
-        mapping_file.write(json.dumps(mapping))
-        print(f'Mapping created and saved. Vocab size: {vocab_size}')
+    x = normal + proteins + compounds
+    y = [0] * len(normal) + [1] * len(proteins) + [2] * len(compounds)
+    fifths = len(y)//5
 
     # Generate Datasets
-    # convert each character to an array of one hot encoded vectors
-    lines = blended['words'] + compounds['words'] + proteins['words'] + normal['words']
-    X = [to_categorical([mapping[c] for c in l], num_classes=vocab_size) for l in lines]
-    y = to_categorical([0]*len(blended['words']) + [2]*len(compounds['words']) + [1]*len(proteins['words']) + [0]*len(normal['words']), num_classes=3)
 
-    x_train, y_train, x_val, y_val, x_test, y_test = shuffle_and_split_training_set(X, y, float(arguments['--TEST_PERCENT']))
+    combined = list(zip(x, y))
+    random.shuffle(combined)
+    x[:], y[:] = zip(*combined)
+
+    train_x = x[:3*fifths]
+    train_y = y[:3*fifths]
+    val_x = x[3*fifths:4*fifths]
+    val_y = y[3*fifths:4*fifths]
+    test_x = x[4*fifths:]
+    test_y = y[4*fifths:]
 
     # Create Model
-    print('Created dataset\nGenerating model')
-    model = get_model(vocab_size, arguments)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using {device}\nCreated dataset\nGenerating model')
+    model, optim, criterion = get_model(arguments)
 
-    # fit model
-    checkpoint = ModelCheckpoint('weights/weights.{epoch:02d}-{val_loss:.2f}.hdf5')
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=0.001, patience=2)
-    model.fit(x_train, y_train, 
-            batch_size=int(arguments['--BATCH_SIZE']), 
-            epochs=int(arguments['--EPOCHS']), verbose=2, 
-            callbacks=[checkpoint, early_stopping], 
-            validation_data=(x_val, y_val))
+    def timeSince(since):
+        now = time.time()
+        s = now - since
+        m = math.floor(s / 60)
+        s -= m * 60
+        return f'{m}m {int(s):02d}s'
 
-    # save the model to file and evaluate
-    model.save('model.h5')
+    start = time.time()
+    print(f'Training start at {start}')
+    val = [0 for _ in range(4)] # stop when worse than the prev 5 epochs
+    for e in range(1, epochs + 1):
+        loss = train(model, train_x, train_y, batch_size, optim, criterion, device)
 
-    model.evaluate(x_test, y_test, batch_size=int(arguments['--BATCH_SIZE']))
+        vacc = evaluate(val_x, val_y, batch_size, model)
+        # Print iter number, loss, name and guess
+        if e % print_every == 0:
+            print(f'{e}\t{e*100//epochs}%\t({timeSince(start)})\tloss:{loss:.4f}\tacc:{vacc*100:.1f}%')
+
+        # Add validation testing for early stopping
+        if vacc < min(val[:-1]) and min(val) == val[-1]:
+            print(f'Finished early on epoch {e} with validation accuracy of {vacc*100:.1f}%')
+            break
+
+        val = val[1:]
+        val.append(vacc)
+        # Save checkpoints
+
+        torch.save(model.state_dict(), f'./plstm/checkpoints/model_{e}e_{int(vacc*100)}v.pkl')
+
+    # evaluate on test data
+    acc = evaluate(test_x, test_y, batch_size, model)
+    print(f'Accuracy on test set: {acc}')
+
+    # Save model
+    torch.save(model.state_dict(), './model.pkl')
+

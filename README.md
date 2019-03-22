@@ -7,11 +7,17 @@ This project uses a keras LSTM to learn protein names.
 
 In utils there are a collection of python files.
 
+`pipeline.py` runs the model across one patent file.
+
+`choose.py` uses a k-nn model to choose which protein name is most likely.
+
+`preprocess.py` will handle most input text.
+
 `generator.py` will convert paragraphs to n-gram line separated files.
 
 `sample.py` will randomly select from a line separated file into a set amount.
 
-`length.py` will normallize line length.
+`pad.py` will normallize line length.
 
 ### Project Roadmap
 

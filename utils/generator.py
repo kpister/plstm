@@ -3,7 +3,6 @@ Usage:
     generator.py <in-file> <out-file>
 """
 
-from docopt import docopt
 
 # Convert large paragraphs into uni-bi-trigram values separated by newlines
 def gen_ngrams(in_text):
@@ -37,6 +36,7 @@ def gen_ngrams(in_text):
     return sequences
 
 if __name__ == '__main__':
+    from docopt import docopt
     args = docopt(__doc__)
 
     with open(args['<in-file>']) as i, open(args['<out-file>'], 'w') as o:
